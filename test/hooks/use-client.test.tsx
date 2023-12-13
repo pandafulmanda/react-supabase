@@ -14,13 +14,18 @@ describe('useClient', () => {
         expect(Object.keys(result.current)).toEqual([
             'supabaseUrl',
             'supabaseKey',
-            'restUrl',
+            // 'restUrl',
             'realtimeUrl',
             'authUrl',
             'storageUrl',
-            'schema',
+            // 'schema',
+            'functionsUrl',
+            'storageKey',
+            'headers',
             'auth',
+            'fetch',
             'realtime',
+            'rest',
         ])
     })
 })

@@ -1,12 +1,16 @@
-import { Provider, Session, User, UserCredentials } from '@supabase/gotrue-js'
-import { ApiError } from '@supabase/gotrue-js/dist/main/GoTrueApi'
+import {
+    Session, User,
+    SignInWithPasswordCredentials, SignInWithIdTokenCredentials,
+    SignInWithOAuthCredentials, SignInWithPasswordlessCredentials, SignInWithSSO,
+    AuthError,
+} from '@supabase/gotrue-js'
 import { useCallback, useState } from 'react'
 
 import { useClient } from '../use-client'
 import { initialState } from './state'
 
 export type UseSignInState = {
-    error?: ApiError | null
+    error?: AuthError | null
     fetching: boolean
     session?: Session | null
     user?: User | null
@@ -15,8 +19,7 @@ export type UseSignInState = {
 export type UseSignInResponse = [
     UseSignInState,
     (
-        credentials: UserCredentials,
-        options?: UseSignInOptions,
+        credentials: SignInWithPasswordCredentials,
     ) => Promise<Pick<UseSignInState, 'error' | 'session' | 'user'>>,
 ]
 
@@ -25,31 +28,46 @@ export type UseSignInOptions = {
     scopes?: string
 }
 
-export type UseSignInConfig = {
-    provider?: Provider
-    options?: UseSignInOptions
-}
+export type SignInCredentials = (
+    SignInWithPasswordCredentials | SignInWithIdTokenCredentials | SignInWithOAuthCredentials
+    | SignInWithPasswordlessCredentials | SignInWithSSO
+)
 
-export function useSignIn(config: UseSignInConfig = {}): UseSignInResponse {
+export function useSignIn(): UseSignInResponse {
     const client = useClient()
     const [state, setState] = useState<UseSignInState>(initialState)
 
-    const execute = useCallback(
-        async (credentials: UserCredentials, options?: UseSignInOptions) => {
-            setState({ ...initialState, fetching: true })
-            const { error, session, user } = await client.auth.signIn(
-                {
-                    provider: config.provider,
-                    ...credentials,
-                },
-                options ?? config.options,
-            )
-            const res = { error, session, user }
-            setState({ ...res, fetching: false })
-            return res
-        },
-        [client, config],
-    )
+    async function signIn(withPassword:SignInWithPasswordCredentials):Promise<object>;
+    async function signIn(withToken:SignInWithIdTokenCredentials):Promise<object>;
+    async function signIn(withOAuth:SignInWithOAuthCredentials):Promise<object>;
+    async function signIn(withPasswordless:SignInWithPasswordlessCredentials):Promise<object>;
+    async function signIn(withSSO:SignInWithSSO):Promise<object>;
+    async function signIn(credentials:SignInCredentials):Promise<object> {
+        setState({ ...initialState, fetching: true })
 
+        let authFn // =  client.auth.signInWithOtp
+        if ('provider' in credentials) {
+            if ('token' in credentials) {
+                authFn = client.auth.signInWithIdToken
+            }
+            authFn = client.auth.signInWithOAuth
+        } else if ('password' in credentials) {
+            authFn = client.auth.signInWithPassword
+        } else if ('providerId' in credentials || 'domain' in credentials) {
+            authFn = client.auth.signInWithSSO
+        } else {
+            authFn = client.auth.signInWithOtp
+        }
+
+        const { error, data: { session, user }} = await authFn(
+            {
+                ...credentials,
+            },
+        )
+        const res = { error, session, user }
+        setState({ ...res, fetching: false })
+        return res
+    }
+    const execute = useCallback(signIn, [client])
     return [state, execute]
 }
